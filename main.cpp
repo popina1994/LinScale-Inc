@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <boost/program_options.hpp>
 #include <mkl_lapacke.h>
+#include <omp.h>  // OpenMP header
+
 #include <chrono>  // For timing
 namespace po = boost::program_options;
 
@@ -73,7 +75,7 @@ void generateRandom(T*& pArr, int numRows, int numCols, int offset)
     }
 }
 
-template<typename T, MajorOrder orderOutput>
+template<typename T, MajorOrder orderInput, MajorOrder orderOutput>
 void generateCartesianProduct(T* pArr1, T* pArr2, int numRows1, int numCols1, int numRows2, int numCols2, T*& pArr)
 {
     int numRows = numRows1 * numRows2;
@@ -85,43 +87,40 @@ void generateCartesianProduct(T* pArr1, T* pArr2, int numRows1, int numCols1, in
         int rowIdx2 = rowIdx % numRows2;
         for (int colIdx = 0; colIdx < numCols1; colIdx++)
         {
-            int pos;
-            if constexpr (orderOutput == MajorOrder::ROW_MAJOR)
-            {
-                pos = IDX_R(rowIdx, colIdx, numRows, numCols);
-            }
-            else
-            {
-                pos = IDX_C(rowIdx, colIdx, numRows, numCols);
-            }
-            pArr[pos] =  pArr1[IDX_R(rowIdx1, colIdx, numRows1, numCols1)];
+            int64_t pos = getPosId<orderOutput>(rowIdx, colIdx, numRows,  numCols);
+            pArr[pos] =  pArr1[getPosId<orderInput>(rowIdx1, colIdx, numRows1,  numCols1)];
         }
         for (int colIdx = numCols1; colIdx < numCols; colIdx++)
         {
-            int pos;
-            if constexpr (orderOutput == MajorOrder::ROW_MAJOR)
-            {
-                pos = IDX_R(rowIdx, colIdx, numRows, numCols);
-            }
-            else
-            {
-                pos = IDX_C(rowIdx, colIdx, numRows, numCols);
-            }
-            pArr[pos] =  pArr2[IDX_R(rowIdx2, colIdx - numCols1, numRows2, numCols2)];
+            int64_t pos = getPosId<orderOutput>(rowIdx, colIdx, numRows, numCols);
+            pArr[pos] =  pArr2[getPosId<orderInput>(rowIdx2, colIdx - numCols1, numRows2, numCols2)];
         }
     }
 }
 
-template<typename T>
+template<MajorOrder majorOrder>
+int64_t getPosId(int64_t rowIdx, int64_t colIdx, int64_t numRows, int64_t numCols)
+{
+    if (MajorOrder::ROW_MAJOR == majorOrder)
+    {
+        return IDX_R(rowIdx, colIdx, numRows, numCols);
+    }
+    else
+    {
+        return IDX_C(rowIdx, colIdx, numRows, numCols);
+    }
+}
+
+template<typename T, MajorOrder majorOrder>
 void computeHeadsAndTails(T* d_mat, int numRows, int numCols, int colIdx) {
-    T dataHeads[1024];
+    T dataHeads;
     int headRowIdx = 0;
+    int64_t posIdx;
 
     if (colIdx < numCols)
     {
-        dataHeads[colIdx] = d_mat[IDX_R(headRowIdx, colIdx, numRows, numCols)];
+        dataHeads = d_mat[getPosId<majorOrder>(headRowIdx, colIdx, numRows, numCols)];
     }
-    // __syncthreads();
     for (int rowIdx = headRowIdx + 1; rowIdx < numRows; rowIdx++)
     {
         T i = rowIdx - headRowIdx + 1;
@@ -129,23 +128,20 @@ void computeHeadsAndTails(T* d_mat, int numRows, int numCols, int colIdx) {
         {
             T prevRowSum;
             T tailVal;
-            prevRowSum = dataHeads[colIdx];
-            T matVal = d_mat[IDX_R(rowIdx, colIdx, numRows, numCols)];
-            dataHeads[colIdx] += matVal;
-            tailVal = (matVal * (i - 1) - prevRowSum) / sqrtf(i * (i - 1));
-            d_mat[IDX_R(rowIdx, colIdx, numRows, numCols)] = tailVal;
-            // printf("TAIL VAL %d %d %.3f %.3f\n", rowIdx, colIdx, i, tailVal);
+            prevRowSum = dataHeads;
+            T matVal = d_mat[getPosId<majorOrder>(rowIdx, colIdx, numRows, numCols)];
+            dataHeads += matVal;
+            tailVal = (matVal * (i - 1) - prevRowSum) / sqrt(i * (i - 1));
+            d_mat[getPosId<majorOrder>(rowIdx, colIdx, numRows, numCols)] = tailVal;
         }
-        // __syncthreads();
     }
     if (colIdx < numCols)
     {
-        d_mat[IDX_R(headRowIdx, colIdx, numRows, numCols)] = dataHeads[colIdx] / sqrtf(numRows);
-        // printf("HT: %.3f\n", dataHeads[colIdx] / sqrtf(numRows));
+        d_mat[getPosId<majorOrder>(headRowIdx, colIdx, numRows, numCols)] = dataHeads / sqrt(numRows);
     }
 }
 
-template <typename T>
+template <typename T, MajorOrder majorOrder>
 void concatenateHeadsAndTails(T* d_mat, T* d_mat2Mod, T* dOutMat, int numRows1, int numCols1, int numRows2, int numCols2, int colIdx) {
     int headRowIdx = 0;
     const int numRowsOut = numRows1 + numRows2 - 1;
@@ -155,14 +151,13 @@ void concatenateHeadsAndTails(T* d_mat, T* d_mat2Mod, T* dOutMat, int numRows1, 
     {
         if (colIdx < numCols1)
         {
-            int posIdx = IDX_R(rowIdx, colIdx, numRowsOut, numColsOut);
-            dOutMat[posIdx] = d_mat[IDX_R(rowIdx, colIdx, numRows1, numCols1)] * sqrtf(numRows2);
-            // printf("HERE 1 %d %d %.3f %d\n", rowIdx, colIdx, dOutMat[posIdx], posIdx);
+            int posIdx = getPosId<majorOrder>(rowIdx, colIdx, numRowsOut, numColsOut);
+            dOutMat[posIdx] = d_mat[getPosId<majorOrder>(rowIdx, colIdx, numRows1, numCols1)] * sqrt(numRows2);
         }
         if (colIdx < numCols2)
         {
-            int posIdx2 = IDX_R(rowIdx, colIdx + numCols1, numRowsOut, numColsOut);
-            dOutMat[posIdx2] = d_mat2Mod[IDX_R(headRowIdx, colIdx, numRows2, numCols2)];
+            int posIdx2 = getPosId<majorOrder>(rowIdx, colIdx + numCols1, numRowsOut, numColsOut);
+            dOutMat[posIdx2] = d_mat2Mod[getPosId<majorOrder>(headRowIdx, colIdx, numRows2, numCols2)];
             // printf("HERE 1 %d %d %.3f %d\n", rowIdx, colIdx + numCols1, dOutMat[posIdx2], posIdx2);
         }
     }
@@ -170,14 +165,14 @@ void concatenateHeadsAndTails(T* d_mat, T* d_mat2Mod, T* dOutMat, int numRows1, 
     {
         if (colIdx < numCols1)
         {
-            int posIdx = IDX_R(rowIdx, colIdx, numRowsOut, numColsOut);
+            int posIdx = getPosId<majorOrder>(rowIdx, colIdx, numRowsOut, numColsOut);
             dOutMat[posIdx] = 0;
             // printf("HERE 2 %d %d %.3f %d \n", rowIdx, colIdx, dOutMat[posIdx], posIdx);
         }
         if (colIdx < numCols2)
         {
-            int posIdx2 = IDX_R(rowIdx, colIdx + numCols1, numRowsOut, numColsOut);
-            dOutMat[posIdx2] = d_mat2Mod[IDX_R(rowIdx - numRows1 + 1, colIdx, numRows2, numCols2)] * sqrtf(numRows1);
+            int posIdx2 = getPosId<majorOrder>(rowIdx, colIdx + numCols1, numRowsOut, numColsOut);
+            dOutMat[posIdx2] = d_mat2Mod[getPosId<majorOrder>(rowIdx - numRows1 + 1, colIdx, numRows2, numCols2)] * sqrt(numRows1);
             // printf("HERE 2 %d %d %.3f %d\n", rowIdx, colIdx + numCols1, dOutMat[posIdx2], posIdx2);
         }
     }
@@ -196,7 +191,7 @@ void concatenateHeadsAndTails(T* d_mat, T* d_mat2Mod, T* dOutMat, int numRows1, 
 // 	}
 // }
 
-template <typename T>
+template <typename T, MajorOrder majorOrder>
 int computeFigaro(T* h_mat1, T* h_mat2, int numRows1, int numCols1, int numRows2, int numCols2,
     std::string& fileName, int compute)
 {
@@ -210,13 +205,18 @@ int computeFigaro(T* h_mat1, T* h_mat2, int numRows1, int numCols1, int numRows2
     // Compute join offsets for both tables
     // compute join offsets
     // for loop call for each subset the
+    std::cout << "NUM THREADS" << omp_get_max_threads() << std::endl;
+    omp_set_num_threads(omp_get_max_threads());
+
+    #pragma omp parallel for schedule(static)
     for (int colIdx = 0; colIdx < numCols2; colIdx++)
     {
-        computeHeadsAndTails(h_mat2, numRows2, numCols2, colIdx);
+        computeHeadsAndTails<T, majorOrder>(h_mat2, numRows2, numCols2, colIdx);
     }
+    #pragma omp parallel for schedule(static)
     for (int colIdx = 0; colIdx < std::max(numCols1, numCols2); colIdx++)
     {
-        concatenateHeadsAndTails(h_mat1, h_mat2, h_matOut, numRows1, numCols1, numRows2, numCols2, colIdx);
+        concatenateHeadsAndTails<T, majorOrder>(h_mat1, h_mat2, h_matOut, numRows1, numCols1, numRows2, numCols2, colIdx);
     }
 
     int rank = std::min(numRowsOut, numColsOut);
@@ -231,8 +231,14 @@ int computeFigaro(T* h_mat1, T* h_mat2, int numRows1, int numCols1, int numRows2
 
         T *tau = new T[numColsOut];  // Stores Householder reflector coefficients
         int info;
-
-        info = LAPACKE_dgeqrf(LAPACK_ROW_MAJOR, numRowsOut, numColsOut, h_matOut, numColsOut, tau);
+        if (majorOrder == MajorOrder::ROW_MAJOR)
+        {
+            info = LAPACKE_dgeqrf(LAPACK_ROW_MAJOR, numRowsOut, numColsOut, h_matOut, numColsOut, tau);
+        }
+        else
+        {
+            info = LAPACKE_dgeqrf(LAPACK_COL_MAJOR, numRowsOut, numColsOut, h_matOut, numRowsOut, tau);
+        }
         if (info != 0)
         {
             std::cerr << "QR decomposition failed!" << std::endl;
@@ -271,7 +277,7 @@ int computeFigaro(T* h_mat1, T* h_mat2, int numRows1, int numCols1, int numRows2
     }
     else
     {
-        printMatrix<T, MajorOrder::ROW_MAJOR>(h_matOut, numRowsOut, numColsOut, numColsOut, fileName + "LinScale", true);
+        printMatrix<T, majorOrder>(h_matOut, numRowsOut, numColsOut, numColsOut, fileName + "LinScale", true);
 	    std::cout << "QR decomposition ";
     }
     std::cout << "Linscale took " << elapsed << " seconds.\n";
@@ -289,7 +295,14 @@ int computeGeneral(T* h_A, int numRows, int numCols, const std::string& fileName
 
     // Perform QR decomposition: A -> R (upper part), reflectors in lower part
     auto start = std::chrono::high_resolution_clock::now();
-    info = LAPACKE_dgeqrf(LAPACK_ROW_MAJOR, numRows, numCols, h_A, numCols, tau);
+    if (majorOrder == MajorOrder::ROW_MAJOR)
+    {
+        info = LAPACKE_dgeqrf(LAPACK_ROW_MAJOR, numRows, numCols, h_A, numCols, tau);
+    }
+    else
+    {
+        info = LAPACKE_dgeqrf(LAPACK_COL_MAJOR, numRows, numCols, h_A, numRows, tau);
+    }
     auto end = std::chrono::high_resolution_clock::now();
     double elapsed = std::chrono::duration<double>(end - start).count();
     if (info != 0)
@@ -298,7 +311,7 @@ int computeGeneral(T* h_A, int numRows, int numCols, const std::string& fileName
         return -1;
     }
     // Compute elapsed time
-    printMatrix<T, MajorOrder::ROW_MAJOR>(h_A, numRows, numCols, numCols, fileName + "MKL", true);
+    printMatrix<T, majorOrder>(h_A, numRows, numCols, numCols, fileName + "MKL", true);
 
 
     // Print execution time
@@ -313,20 +326,20 @@ void evaluate(int numRows1, int numCols1, int numRows2, int numCols2, std::strin
     double *h_mat1, *h_mat2, *pArr;
     generateRandom(h_mat1, numRows1, numCols1, 0);
     generateRandom(h_mat2, numRows2, numCols2, 10);
-    printMatrix<double, MajorOrder::ROW_MAJOR>(h_mat1, numRows1, numCols1, numRows1, "A.csv", false);
-    printMatrix<double, MajorOrder::ROW_MAJOR>(h_mat2, numRows2, numCols2, numRows2, "B.csv", false);
+    // printMatrix<double, MajorOrder::ROW_MAJOR>(h_mat1, numRows1, numCols1, numRows1, "A.csv", false);
+    // printMatrix<double, MajorOrder::ROW_MAJOR>(h_mat2, numRows2, numCols2, numRows2, "B.csv", false);
 
-    generateCartesianProduct<double, MajorOrder::ROW_MAJOR>(h_mat1, h_mat2, numRows1, numCols1, numRows2, numCols2, pArr);
-    //printMatrix<double, MajorOrder::ROW_MAJOR>(pArr, numRows1 * numRows2, numCols1 + numCols2, numRows1 * numRows2, "mat.csv", false);
+    generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(h_mat1, h_mat2, numRows1, numCols1, numRows2, numCols2, pArr);
+    // printMatrix<double, MajorOrder::COL_MAJOR>(pArr, numRows1 * numRows2, numCols1 + numCols2, numRows1 * numRows2, "mat.csv", false);
 
-    computeGeneral<double, MajorOrder::ROW_MAJOR>(pArr, numRows1 * numRows2, numCols1 + numCols2, fileName, compute);
-    computeFigaro<double>(h_mat1, h_mat2, numRows1, numCols1, numRows2, numCols2, fileName, compute);
+    computeGeneral<double, MajorOrder::COL_MAJOR>(pArr, numRows1 * numRows2, numCols1 + numCols2, fileName, compute);
+    computeFigaro<double, MajorOrder::ROW_MAJOR>(h_mat1, h_mat2, numRows1, numCols1, numRows2, numCols2, fileName, compute);
 }
 
 int main(int argc, char* argv[])
 {
-    int numRows1 = 1000, numCols1 = 4;
-    int numRows2 = 2, numCols2 = 4;
+    int numRows1 = 1000, numCols1 = 24;
+    int numRows2 = 1000, numCols2 = 24;
     int compute = 1;
     try {
         // Define the command-line options
