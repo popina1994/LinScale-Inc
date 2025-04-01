@@ -91,6 +91,12 @@ struct Matrix
         int64_t posId = getPosId<majorOrder>(rowIdx, colIdx, numRows, numCols);
         return pArr[posId];
     }
+
+    const T& operator()(int rowIdx, int colIdx) const
+    {
+        int64_t posId = getPosId<majorOrder>(rowIdx, colIdx, numRows, numCols);
+        return pArr[posId];
+    }
     T*& getData()
     {
         return pArr;
@@ -115,7 +121,7 @@ using MatrixDCol = Matrix<double, MajorOrder::COL_MAJOR>;
 using MatrixDRow = Matrix<double, MajorOrder::ROW_MAJOR>;
 
 template <typename T, MajorOrder order>
-void printMatrix(T* pArr, int numRows, int numCols, int numRowsCut, const std::string& fileName, bool upperTriangular = false)
+void printMatrix(const T* pArr, int numRows, int numCols, int numRowsCut, const std::string& fileName, bool upperTriangular = false)
 {
     std::ofstream outFile(fileName);
     if (!outFile.is_open())
@@ -172,7 +178,7 @@ void copyMatrix(const T* pArr, T*& pArrOut, int numRows, int numCols, int numRow
 }
 
 template <typename T, MajorOrder order>
-void concatenateMatrices(Matrix<T, order>& mat1, Matrix<T, order>& mat2,
+void concatenateMatrices(const Matrix<T, order>& mat1, const Matrix<T, order>& mat2,
     Matrix<T, order>& matOut,
     bool horizontal = true)
 {
@@ -191,7 +197,7 @@ void concatenateMatrices(Matrix<T, order>& mat1, Matrix<T, order>& mat2,
     {
         for (int colIdx = 0; colIdx < numColsOut; colIdx++)
         {
-            matOut(rowIdx + mat1.getNumRows(), colIdx) = mat1(rowIdx, colIdx);
+            matOut(rowIdx + mat1.getNumRows(), colIdx) = mat2(rowIdx, colIdx);
         }
     }
 }
@@ -216,7 +222,7 @@ Matrix<T, MajorOrder::ROW_MAJOR> generateRandom(int numRows, int numCols, int se
 }
 
 template<typename T, MajorOrder orderInput, MajorOrder orderOutput>
-void generateCartesianProduct(Matrix<T, orderInput>& mat1,  Matrix<T, orderInput>& mat2,
+void generateCartesianProduct(const Matrix<T, orderInput>& mat1,  const Matrix<T, orderInput>& mat2,
     Matrix<T, orderOutput>& matOut)
 {
     int numRows = mat1.getNumRows() * mat2.getNumRows();
@@ -348,7 +354,6 @@ int computeFigaro(const Matrix<T, computeOrder>& mat1, const Matrix<T, computeOr
     // compute join offsets
     // for loop call for each subset the
     omp_set_num_threads(omp_get_max_threads());
-    std::cout << mat1.getDataC() << " " << mat2.getDataC() << std::endl;
     #pragma omp parallel for schedule(static)
     for (int colIdx = 0; colIdx < numCols2; colIdx++)
     {
@@ -463,7 +468,7 @@ int computeGeneral(T* h_A, T*& h_R, int numRows, int numCols, const std::string&
 }
 
 template<typename T, MajorOrder majorOrder>
-void computeMatrixVector(T* pMat, T* pVect, T*& pOutVect, int numRows, int numCols,
+void computeMatrixVector(const T* pMat, const T* pVect, T*& pOutVect, int numRows, int numCols,
     bool transpose = false)
 {
     T alpha = 1.0;
@@ -506,7 +511,7 @@ void computeMatrixMatrix(T* pMat1, T* pMat2, T*& pOutMat, int numRows1, int numC
 }
 
 template<typename T, MajorOrder majorOrder>
-void selfTransposeMatrixMultiplication(T* pMat, T*& pOutMat, int numRows, int numCols)
+void selfTransposeMatrixMultiplication(const T* pMat, T*& pOutMat, int numRows, int numCols)
 {
     pOutMat = new T[numCols * numCols];
     double alpha = 1.0, beta = 0.0;
@@ -555,7 +560,7 @@ void computeInverse(T* pMat, int numRows, int numCols)
 // x = (A^T * A)^ inv * A^T * b
 // A^T * A = R^T * R
 template<typename T, MajorOrder majorOrder, MajorOrder rMajorOrder>
-void solveLLS(T* pMatA, T* pMatR, T* pVectB, T*& pOutVect, int  numRows, int numCols, const std::string& fileName)
+void solveLLS(const T* pMatA, const T* pMatR, const T* pVectB, T*& pOutVect, int  numRows, int numCols, const std::string& fileName)
 {
     T* pOutMat;
     T* pTempVect;
@@ -601,108 +606,161 @@ double computeMeanSquaredError(T* pA, T* pB, int numRows)
 }
 
 
-// void evaluateTrainUpdate(MatrixDRow& mat1, MatrixDRow& mat2, MatrixDRow& vectX,
-//     MatrixDCol& matMKLRUpdate, MatrixDCol& matFigRUpdate,
-//     const std::string& fileName,
-//     double*& pVectXMKL, double*& pVectXFig, int compute)
-// {
-//     double *h_pCartProdTrain, *h_pCartProdTest;
-//     double *h_vectXCompMKL, *h_vectXCompFig, *pOutVectBTrain, *pOutVectBTest;
-//     double *h_MKLROut;
-//     int numRowsUpdate = 100;
-//     auto mat1Update = generateRandom<double>(numRowsUpdate, mat1.getNumCols(), 11);
-//     MatrixDRow mat1Out{1, 1};
-//     concatenateMatrices(mat1, mat1Update, mat1Out, true);
-//     generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1Update, mat2, h_pCartProdTrain);
-//     computeMatrixVector<double, MajorOrder::COL_MAJOR>(h_pCartProdTrain, vectX.getData(), pOutVectBTrain,
-//         mat1Update.getNumRows() * mat2.getNumRows(),
-//         mat1Update.getNumCols() + mat2.getNumCols(), false);
+void evaluateTrain(const MatrixDRow& mat1, const MatrixDRow& mat2,
+    double* h_pCartProdTrain, MatrixDCol& matMKLR, MatrixDRow& matFigR,
+    const std::string& fileName, int compute);
 
-//     MatrixDCol matMKLROut{mat1Update.getNumRows() * mat2.getNumRows(),
-//         mat1Update.getNumCols() + mat2.getNumCols()};
-//     MatrixDCol matMKLR{matMKLROut.getNumCols(), matMKLROut.getNumCols()};
+
+template<typename T>
+void evaluateTest(int numRows1, int numCols1, int numRows2, int numCols2, MatrixDRow& vectX,
+    T* h_vectXCompMKL, T* h_vectXCompFig, int seed);
+
+void computeVectors(const MatrixDCol& matCartProd, const MatrixDCol& matMKLR, const MatrixDRow& matFigR,
+    const double* pVectBTrain, double*& h_vectXCompMKL, double*& h_vectXCompFig, int seed);
 
 
 
-//     // /*********** TRAINING ***********************/
-//     computeGeneral<double, MajorOrder::COL_MAJOR>(h_pCartProdTrain, matMKLROut.getData(),
-//         matMKLROut.getNumRows(), matMKLROut.getNumCols(), fileName, compute);
-//     copyMatrix<double, MajorOrder::COL_MAJOR>(matMKLROut.getData(), matMKLR.getData(),
-//         matMKLROut.getNumRows(), matMKLROut.getNumCols(),
-//         matMKLROut.getNumCols(), matMKLROut.getNumCols(), true);
-//     MatrixDCol matRMKLConc {1, 1};
-//     concatenateMatrices(matMKLRUpdate, matMKLR, matRMKLConc, true);
+void evaluateTrainUpdate(
+    const MatrixDRow& mat1, const MatrixDRow& mat2,
+    const MatrixDRow& mat1Update,
+    const MatrixDRow& vectX,
+    MatrixDCol& matMKLRUpdate, MatrixDRow& matFigRUpdate,
+    const std::string& fileName, int compute, int seed)
+{
+    double *pOutVectBTrain;
+    MatrixDRow mat1Out{1, 1};
+    concatenateMatrices<double, MajorOrder::ROW_MAJOR>(mat1, mat1Update, mat1Out, true);
+
+    printMatrix<double, MajorOrder::ROW_MAJOR>(mat1Update.getDataC(), mat1Update.getNumRows(),
+    mat1Update.getNumCols(), mat1Update.getNumRows(), std::to_string(seed) +"UPDATE_MAT_1.csv", false);
+
+    printMatrix<double, MajorOrder::ROW_MAJOR>(mat1.getDataC(), mat1.getNumRows(),
+    mat1.getNumCols(), mat1.getNumRows(), std::to_string(seed) +"A_1.csv", false);
+
+    MatrixDCol matCardProd{1, 1};
+    generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1Update, mat2, matCardProd);
+    printMatrix<double, MajorOrder::COL_MAJOR>(matCardProd.getDataC(), matCardProd.getNumRows(),
+    matCardProd.getNumCols(), matCardProd.getNumRows(), std::to_string(seed) +std::to_string(seed)+ "CartProd.csv", false);
+    computeMatrixVector<double, MajorOrder::COL_MAJOR>(matCardProd.getDataC(), vectX.getDataC(), pOutVectBTrain,
+        mat1Update.getNumRows() * mat2.getNumRows(),
+        mat1Update.getNumCols() + mat2.getNumCols(), false);
 
 
-//     matMKLROut = MatrixDCol{matMKLRUpdate.getNumRows() ,matMKLRUpdate.getNumCols() };
-//     matMKLR = MatrixDCol{matMKLRUpdate.getNumCols() ,matMKLRUpdate.getNumCols() };
-//     computeGeneral<double, MajorOrder::COL_MAJOR>(matRMKLConc.getData(), matMKLROut.getData(),
-//         matMKLROut.getNumRows(), matMKLROut.getNumCols(), fileName, compute);
-//     copyMatrix<double, MajorOrder::COL_MAJOR>(matMKLROut.getData(), matMKLR.getData(),
-//         matMKLROut.getNumRows(), matMKLROut.getNumCols(),
-//         matMKLROut.getNumCols(), matMKLROut.getNumCols(), true);
-//     matMKLRUpdate = std::move(matMKLR);
-//     // printMatrix<double, MajorOrder::COL_MAJOR>(h_MKLR, numCols1 + numCols2, numCols1 + numCols2, numCols1 + numCols2, "R.csv", false);
+    MatrixDCol matMKLROut{mat1Update.getNumRows() * mat2.getNumRows(),
+        mat1Update.getNumCols() + mat2.getNumCols()};
+    MatrixDCol matMKLR{matMKLROut.getNumCols(), matMKLROut.getNumCols()};
+    // /*********** TRAINING ***********************/
+    computeGeneral<double, MajorOrder::COL_MAJOR>(matCardProd.getData(), matMKLROut.getData(),
+        matCardProd.getNumRows(), matCardProd.getNumCols(), fileName, compute);
+    copyMatrix<double, MajorOrder::COL_MAJOR>(matMKLROut.getData(), matMKLR.getData(),
+        matMKLROut.getNumRows(), matMKLROut.getNumCols(),
+        matMKLROut.getNumCols(), matMKLROut.getNumCols(), true);
+    printMatrix<double, MajorOrder::COL_MAJOR>(matMKLR.getData(), matMKLR.getNumRows(),
+    matMKLR.getNumCols(), matMKLR.getNumRows(), std::to_string(seed) +"UPDATE_MKL_R.csv", false);
+    MatrixDCol matRMKLConc {1, 1};
 
-//     solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::COL_MAJOR>(h_pCartProdTrain, matMKLRUpdate.getData(),     pOutVectBTrain, pVectXMKL, mat1Update.getNumRows() * mat2.getNumRows(),
-//         mat1Update.getNumCols() + mat2.getNumCols(), "results/MKLInc");
+    concatenateMatrices(matMKLRUpdate, matMKLR, matRMKLConc, true);
+    printMatrix<double, MajorOrder::COL_MAJOR>(matMKLRUpdate.getData(), matMKLRUpdate.getNumCols(),
+    matMKLRUpdate.getNumCols(), matMKLRUpdate.getNumCols(), std::to_string(seed) +"MKLRUPDATE.csv", false);
+        printMatrix<double, MajorOrder::COL_MAJOR>(matMKLRUpdate.getData(), matMKLRUpdate.getNumCols(),
+    matMKLRUpdate.getNumCols(), matMKLRUpdate.getNumCols(), std::to_string(seed) +"matMKLR.csv", false);
+            printMatrix<double, MajorOrder::COL_MAJOR>(matRMKLConc.getData(), matRMKLConc.getNumRows(),
+    matRMKLConc.getNumCols(), matRMKLConc.getNumRows(), std::to_string(seed) +"matMKLConcatR.csv", false);
 
-//     MatrixDCol matFigaroR{mat1Update.getNumRows() + mat2.getNumRows() - 1,
-//         mat1Update.getNumCols() + mat2.getNumCols()};
-//     computeFigaro<double, MajorOrder::ROW_MAJOR>(mat1Update, mat2,
-//         matFigaroR.getData(), fileName, compute);
-//     MatrixDCol matRFigConc {1, 1};
-//     concatenateMatrices(matFigRUpdate, matFigaroR, matRFigConc, true);
+    matMKLROut = MatrixDCol{matRMKLConc.getNumRows() ,matRMKLConc.getNumCols() };
+    matMKLR = MatrixDCol{matMKLRUpdate.getNumCols() ,matMKLRUpdate.getNumCols() };
+    computeGeneral<double, MajorOrder::COL_MAJOR>(matRMKLConc.getData(), matMKLROut.getData(),
+        matRMKLConc.getNumRows(), matRMKLConc.getNumCols(), fileName, compute);
+    copyMatrix<double, MajorOrder::COL_MAJOR>(matMKLROut.getData(), matMKLR.getData(),
+        matMKLROut.getNumRows(), matMKLROut.getNumCols(),
+        matMKLROut.getNumCols(), matMKLROut.getNumCols(), true);
 
-//     MatrixDCol matFigROut{matFigRUpdate.getNumRows(),
-//         matFigRUpdate.getNumCols()};
-//     MatrixDCol matFigR{matFigROut.getNumCols(), matFigROut.getNumCols()};
-//     computeGeneral<double, MajorOrder::ROW_MAJOR>(matRFigConc.getData(), matFigROut.getData(),
-//         matFigROut.getNumRows(), matFigROut.getNumCols(), fileName, compute);
-//     copyMatrix<double, MajorOrder::ROW_MAJOR>(matFigROut.getData(), matFigR.getData(),
-//         matFigROut.getNumRows(), matFigROut.getNumCols(),
-//         matFigROut.getNumCols(), matFigROut.getNumCols(), true);
-//     matFigRUpdate = std::move(matFigR);
+    matMKLRUpdate = std::move(matMKLR);
+    printMatrix<double, MajorOrder::COL_MAJOR>(matMKLRUpdate.getData(), matMKLRUpdate.getNumCols(),
+    matMKLRUpdate.getNumCols(), matMKLRUpdate.getNumCols(), std::to_string(seed) +"MKLR.csv", false);
 
-//     solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::ROW_MAJOR>(h_pCartProdTrain, matFigRUpdate.getData(), pOutVectBTrain, pVectXFig, mat1Update.getNumRows() * mat2.getNumRows(),
-//         mat1Update.getNumCols() + mat2.getNumCols(), "results/LinScale");
+    MatrixDRow matFigaroR{mat1Update.getNumRows() + mat2.getNumRows() - 1,
+        mat1Update.getNumCols() + mat2.getNumCols()};
+    computeFigaro<double, MajorOrder::ROW_MAJOR>(mat1Update, mat2,
+        matFigaroR.getData(), fileName, compute);
+    printMatrix<double, MajorOrder::ROW_MAJOR>(matFigaroR.getData(), matFigaroR.getNumRows(),
+    matFigaroR.getNumCols(), matFigaroR.getNumRows(), std::to_string(seed) +"UPDATE_FIG_R.csv", false);
+    MatrixDRow matRFigConc {1, 1};
+    concatenateMatrices(matFigRUpdate, matFigaroR, matRFigConc, true);
+
+    MatrixDRow matFigROut{matRFigConc.getNumRows(),
+        matRFigConc.getNumCols()};
+    MatrixDRow matFigR{matFigROut.getNumCols(), matFigROut.getNumCols()};
+    computeGeneral<double, MajorOrder::ROW_MAJOR>(matRFigConc.getData(), matFigROut.getData(),
+        matRFigConc.getNumRows(), matRFigConc.getNumCols(), fileName, compute);
+    copyMatrix<double, MajorOrder::ROW_MAJOR>(matFigROut.getData(), matFigR.getData(),
+        matFigROut.getNumRows(), matFigROut.getNumCols(),
+        matFigROut.getNumCols(), matFigROut.getNumCols(), true);
+    matFigRUpdate = std::move(matFigR);
+
+    printMatrix<double, MajorOrder::ROW_MAJOR>(matFigROut.getData(), matFigRUpdate.getNumCols(), matFigRUpdate.getNumCols(), matFigRUpdate.getNumCols(), std::to_string(seed) + "LINR.csv", false);
+}
+
+void evaluateRowUpdates(int numRows1, int numCols1, int numRows2, int numCols2, std::string& fileName, int compute)
+{
+    double* pVectXMKL;
+    double* pVectXFig;
+
+    /*********** DATA GENERATION ***********************/
+    auto mat1 = generateRandom<double>(numRows1, numCols1, 0);
+    auto mat2 = generateRandom<double>(numRows2, numCols2, 10);
+    auto vectX = generateRandom<double>(1, numCols1 + numCols2, 15);
+    const int numUpdatesTotal = 10;
+
+    double* pOutVectBTrain;
+    MatrixDCol matCartProd{1, 1};
+    generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1, mat2, matCartProd);
+    computeMatrixVector<double, MajorOrder::COL_MAJOR>(matCartProd.getData(), vectX.getData(), pOutVectBTrain,
+        matCartProd.getNumRows(), matCartProd.getNumCols(), false);
+
+    MatrixDCol matMKLR{1, 1};
+    MatrixDRow matFigR{1, 1};
+    evaluateTrain(mat1, mat2, matCartProd.getData(), matMKLR, matFigR, fileName, compute);
+    computeVectors(matCartProd, matMKLR, matFigR, pOutVectBTrain, pVectXMKL, pVectXFig, -1);
+    evaluateTest(numRows1, numCols1, numRows2, numCols2, vectX, pVectXMKL, pVectXFig, -1);
+
+    for (int numUpdates = 0; numUpdates < numUpdatesTotal; numUpdates++)
+    {
+        int numRowsUpdate = 11;
+        auto mat1Update = generateRandom<double>(numRowsUpdate, mat1.getNumCols(), 121 + numUpdates);
+        MatrixDRow mat1Out{1, 1};
+        concatenateMatrices<double, MajorOrder::ROW_MAJOR>(mat1, mat1Update, mat1Out, true);
 
 
-// }
+        MatrixDCol matCardProdUpdate{1, 1};
+        generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1Update, mat2,
+         matCardProdUpdate);
+        MatrixDCol matCartOut{1, 1};
 
+        // update cartesian product size
+        concatenateMatrices<double, MajorOrder::COL_MAJOR>(matCartProd, matCardProdUpdate, matCartOut, true);
+        matCartProd = std::move(matCartOut);
+        delete [] pOutVectBTrain;
+        // add new b values
+        computeMatrixVector<double, MajorOrder::COL_MAJOR>(matCartProd.getData(), vectX.getData(), pOutVectBTrain, matCartProd.getNumRows(), matCartProd.getNumCols(), false);
 
-// void evaluateRowUpdates(int numRows1, int numCols1, int numRows2, int numCols2, std::string& fileName, int compute)
-// {
-//     /*********** DATA GENERATION ***********************/
-//     auto mat1 = generateRandom<double>(numRows1, numCols1, 0);
-//     auto mat2 = generateRandom<double>(numRows2, numCols2, 10);
-//     auto vectX = generateRandom<double>(1, numCols1 + numCols2, 15);
-//     const int numUpdatesTotal = 10;
-//     MatrixDCol matMKLR{1, 1};
-//     MatrixDCol matFigR{1, 1};
-//     double* pVectXMKL;
-//     double* pVectXFig;
-//     for (int numUpdates = 0; numUpdates < numUpdatesTotal; numUpdates++)
-//     {
-//         evaluateTrainUpdate(mat1, mat2, vectX, matMKLR, matFigR, fileName, pVectXMKL, pVectXFig, compute);
-//         /*********** TESTING ***********************/
-//         // auto mat1Test = generateRandom<double>(numRows1, numCols1, 0);
-//         // auto mat2Test = generateRandom<double>(numRows2, numCols2, 10);
-//         // generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1, mat2, h_pCartProdTrain);
-//         // computeMatrixVector<double, MajorOrder::COL_MAJOR>(h_pCartProdTest, vectX.getData(), pOutVectBTest, numRows1 * numRows2, numCols1 + numCols2, false);
+        evaluateTrainUpdate(mat1, mat2, mat1Update, vectX, matMKLR, matFigR, fileName, compute, numUpdates);
+        computeVectors(matCartProd, matMKLR, matFigR, pOutVectBTrain, pVectXMKL, pVectXFig, numUpdates);
+        evaluateTest(numRows1, numCols1, numRows2, numCols2, vectX, pVectXMKL, pVectXFig, numUpdates);
 
-//         // double* pOutVectBTestCompMKL, *pOutVectBTestCompFig;
+        // update the size of mat 1
+        mat1 = std::move(mat1Out);
 
-//         // computeMatrixVector<double, MajorOrder::COL_MAJOR>(h_pCartProdTest, h_vectXCompMKL, pOutVectBTestCompMKL, numRows1 * numRows2, numCols1 + numCols2, false);
-//         // computeMatrixVector<double, MajorOrder::COL_MAJOR>(h_pCartProdTest, h_vectXCompFig, pOutVectBTestCompFig, numRows1 * numRows2, numCols1 + numCols2, false);
+        printMatrix<double, MajorOrder::ROW_MAJOR>(mat1Update.getData(), mat1Update.getNumRows(),
+        mat1Update.getNumCols(), mat1Update.getNumRows(), std::to_string(numUpdates) +"UPDATE_MAT_1.csv", false);
 
-//         // double mklError = computeMeanSquaredError(pOutVectBTestCompMKL, pOutVectBTest, numRows1 * numRows2);
-//         // double figError = computeMeanSquaredError(pOutVectBTestCompFig, pOutVectBTest, numRows1 * numRows2);
-//         // std::cout << "MKL MSE " << mklError << std::endl;
-//         // std::cout << "Figaro MSE " << figError << std::endl;
-//     }
-// }
+        printMatrix<double, MajorOrder::ROW_MAJOR>(mat1.getData(), mat1.getNumRows(),
+        mat1.getNumCols(), mat1.getNumRows(), std::to_string(numUpdates) +"A_1.csv", false);
 
+        // printMatrix<double, MajorOrder::COL_MAJOR>(matMKLR.getData(), numCols1 + numCols2, numCols1 + numCols2, numCols1 + numCols2, "MKLR.csv", true);
+        // printMatrix<double, MajorOrder::ROW_MAJOR>(matFigR.getData(), numCols1 + numCols2, numCols1 + numCols2, numCols1 + numCols2, "FIGR.csv", false);
+    }
+}
 
 void evaluateTrain(const MatrixDRow& mat1, const MatrixDRow& mat2,
     double* h_pCartProdTrain, MatrixDCol& matMKLR, MatrixDRow& matFigR,
@@ -723,37 +781,25 @@ void evaluateTrain(const MatrixDRow& mat1, const MatrixDRow& mat2,
     computeFigaro<double, MajorOrder::ROW_MAJOR>(mat1, mat2, matFigR.getData(), fileName, compute);
 }
 
-
-void evaluate(int numRows1, int numCols1, int numRows2, int numCols2, std::string& fileName, int compute)
+void computeVectors(const MatrixDCol& matCartProd, const MatrixDCol& matMKLR,
+    const MatrixDRow& matFigR, const double* pVectBTrain,
+double*& h_vectXCompMKL, double*& h_vectXCompFig, int seed)
 {
-    double *h_vectXCompMKL, *h_vectXCompFig, *pOutVectBTrain, *pOutVectBTest;
-    double *h_MKLROut, *h_MKLR, *h_FigR;
+    printMatrix<double, MajorOrder::COL_MAJOR>(matMKLR.getDataC(), matMKLR.getNumRows(),
+    matMKLR.getNumCols(), matMKLR.getNumRows(), std::to_string(seed) +"UPDATE2_MKL_R.csv", false);
+        printMatrix<double, MajorOrder::ROW_MAJOR>(matFigR.getDataC(), matMKLR.getNumRows(),
+    matMKLR.getNumCols(), matMKLR.getNumRows(), std::to_string(seed) +"UPDATE2_FIG_R.csv", false);
+    solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::COL_MAJOR>(matCartProd.getDataC(), matMKLR.getDataC(), pVectBTrain, h_vectXCompMKL, matCartProd.getNumRows(), matCartProd.getNumCols(), std::to_string(seed) + "results/MKL");
+    solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::ROW_MAJOR>(matCartProd.getDataC(), matFigR.getDataC(), pVectBTrain, h_vectXCompFig, matCartProd.getNumRows(), matCartProd.getNumCols(), std::to_string(seed) + "results/LinScale");
+}
 
-    /*********** DATA GENERATION ***********************/
-    auto mat1 = generateRandom<double>(numRows1, numCols1, 0);
-    auto mat2 = generateRandom<double>(numRows2, numCols2, 10);
-    auto vectX = generateRandom<double>(1, numCols1 + numCols2, 15);
-
-    // printMatrix<double, MajorOrder::ROW_MAJOR>(mat1.getData(), numRows1, numCols1, numRows1, "A.csv", false);
-    // printMatrix<double, MajorOrder::ROW_MAJOR>(mat2.getData(), numRows2, numCols2, numRows2, "B.csv", false);
-    // printMatrix<double, MajorOrder::COL_MAJOR>(vectX.getData(), numCols1 + numCols2, 1, numCols1 + numCols2, "x_vect.csv", false);
-    MatrixDCol matCartProd{1, 1};
-    generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1, mat2, matCartProd);
-    computeMatrixVector<double, MajorOrder::COL_MAJOR>(matCartProd.getData(), vectX.getData(), pOutVectBTrain, numRows1 * numRows2, numCols1 + numCols2, false);
-
-    // printMatrix<double, MajorOrder::COL_MAJOR>(pOutVectBTrain, numRows1 * numRows2, 1, numRows1 * numRows2, "matProd.csv", false);
-    // printMatrix<double, MajorOrder::COL_MAJOR>(h_pCartProdTrain, numRows1 * numRows2, numCols1 + numCols2, numRows1 * numRows2, "mat.csv", false);
-    MatrixDCol matMKLR{1, 1};
-    MatrixDRow matFigR{1, 1};
-    evaluateTrain(mat1, mat2, matCartProd.getData(), matMKLR, matFigR, fileName, compute);
-    // printMatrix<double, MajorOrder::COL_MAJOR>(matMKLR.getData(), numCols1 + numCols2, numCols1 + numCols2, numCols1 + numCols2, "MKLR.csv", true);
-    printMatrix<double, MajorOrder::ROW_MAJOR>(matFigR.getData(), numCols1 + numCols2, numCols1 + numCols2, numCols1 + numCols2, "FIGR.csv", false);
-    solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::COL_MAJOR>(matCartProd.getData(), matMKLR.getData(), pOutVectBTrain, h_vectXCompMKL, numRows1 * numRows2, numCols1 + numCols2, "results/MKL");
-    solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::ROW_MAJOR>(matCartProd.getData(), matFigR.getData(), pOutVectBTrain, h_vectXCompFig, numRows1 * numRows2, numCols1 + numCols2, "results/LinScale");
-
-    /*********** TESTING ***********************/
-    auto mat1Test = generateRandom<double>(numRows1, numCols1, 0);
-    auto mat2Test = generateRandom<double>(numRows2, numCols2, 10);
+template<typename T>
+void evaluateTest(int numRows1, int numCols1, int numRows2, int numCols2, MatrixDRow& vectX,
+    T* h_vectXCompMKL, T* h_vectXCompFig, int seed)
+{
+    T *pOutVectBTest;
+    auto mat1Test = generateRandom<double>(numRows1, numCols1, 17);
+    auto mat2Test = generateRandom<double>(numRows2, numCols2, 19);
     MatrixDCol matCartProdTest{1, 1};
     generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(
             mat1Test, mat2Test,  matCartProdTest);
@@ -764,8 +810,41 @@ void evaluate(int numRows1, int numCols1, int numRows2, int numCols2, std::strin
     computeMatrixVector<double, MajorOrder::COL_MAJOR>(matCartProdTest.getData(), h_vectXCompFig, pOutVectBTestCompFig, numRows1 * numRows2, numCols1 + numCols2, false);
     double mklError = computeMeanSquaredError(pOutVectBTestCompMKL, pOutVectBTest, numRows1 * numRows2);
     double figError = computeMeanSquaredError(pOutVectBTestCompFig, pOutVectBTest, numRows1 * numRows2);
+
     std::cout << "MKL MSE " << mklError << std::endl;
     std::cout << "Figaro MSE " << figError << std::endl;
+}
+
+void evaluate(int numRows1, int numCols1, int numRows2, int numCols2, std::string& fileName, int compute)
+{
+
+    evaluateRowUpdates(numRows1, numCols1, numRows2, numCols2, fileName, compute);
+    // double *h_vectXCompMKL, *h_vectXCompFig, *pOutVectBTrain;
+
+    // /*********** DATA GENERATION ***********************/
+    // auto mat1 = generateRandom<double>(numRows1, numCols1, 0);
+    // auto mat2 = generateRandom<double>(numRows2, numCols2, 10);
+    // auto vectX = generateRandom<double>(1, numCols1 + numCols2, 15);
+
+    // // printMatrix<double, MajorOrder::ROW_MAJOR>(mat1.getData(), numRows1, numCols1, numRows1, "A.csv", false);
+    // // printMatrix<double, MajorOrder::ROW_MAJOR>(mat2.getData(), numRows2, numCols2, numRows2, "B.csv", false);
+    // // printMatrix<double, MajorOrder::COL_MAJOR>(vectX.getData(), numCols1 + numCols2, 1, numCols1 + numCols2, "x_vect.csv", false);
+    // MatrixDCol matCartProd{1, 1};
+    // generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1, mat2, matCartProd);
+    // computeMatrixVector<double, MajorOrder::COL_MAJOR>(matCartProd.getData(), vectX.getData(), pOutVectBTrain, numRows1 * numRows2, numCols1 + numCols2, false);
+
+    // // printMatrix<double, MajorOrder::COL_MAJOR>(pOutVectBTrain, numRows1 * numRows2, 1, numRows1 * numRows2, "matProd.csv", false);
+    // // printMatrix<double, MajorOrder::COL_MAJOR>(h_pCartProdTrain, numRows1 * numRows2, numCols1 + numCols2, numRows1 * numRows2, "mat.csv", false);
+    // MatrixDCol matMKLR{1, 1};
+    // MatrixDRow matFigR{1, 1};
+    // evaluateTrain(mat1, mat2, matCartProd.getData(), matMKLR, matFigR, fileName, compute);
+    // computeVectors(matCartProd, matMKLR, matFigR, pOutVectBTrain, h_vectXCompMKL, h_vectXCompFig);
+
+
+    // /*********** TESTING ***********************/
+    // evaluateTest(numRows1, numCols2, numRows2, numCols2, vectX, h_vectXCompMKL, h_vectXCompFig);
+
+
 }
 
 int main(int argc, char* argv[])
