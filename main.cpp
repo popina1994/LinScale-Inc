@@ -422,7 +422,7 @@ int computeFigaro(const Matrix<T, computeOrder>& mat1, const Matrix<T, computeOr
     }
     else
     {
-        printMatrix<T, computeOrder>(h_matR, numColsOut, numColsOut, numColsOut, fileName + "LinScale", false);
+      //   printMatrix<T, computeOrder>(h_matR, numColsOut, numColsOut, numColsOut, fileName + "LinScale", false);
 	    std::cout << "QR decomposition ";
     }
     std::cout << "Linscale took " << elapsed << " seconds.\n";
@@ -572,7 +572,7 @@ void solveLLS(const T* pMatA, const T* pMatR, const T* pVectB, T*& pOutVect, int
     // printMatrix<double, MajorOrder::COL_MAJOR>(pOutMat, numCols, numCols, numCols, fileName +"STMMINV.csv", false);
 
     // printMatrix<double, MajorOrder::COL_MAJOR>(pMatA, numRows, numCols, numRows, fileName +"matAOrig.csv", false);
-    //  printMatrix<double, MajorOrder::COL_MAJOR>(pVectB, numRows, 1, numRows, "matBOrig.csv", false);
+    ////   printMatrix<double, MajorOrder::COL_MAJOR>(pVectB, numRows, 1, numRows, "matBOrig.csv", false);
     computeMatrixVector<double, MajorOrder::COL_MAJOR>(pMatA, pVectB, pTempVect, numRows, numCols, true);
     // printMatrix<double, MajorOrder::COL_MAJOR>(pTempVect, numCols, 1, numCols, "ATv.csv", false);
 
@@ -631,16 +631,16 @@ void evaluateTrainUpdate(
     MatrixDRow mat1Out{1, 1};
     concatenateMatrices<double, MajorOrder::ROW_MAJOR>(mat1, mat1Update, mat1Out, true);
 
-    printMatrix<double, MajorOrder::ROW_MAJOR>(mat1Update.getDataC(), mat1Update.getNumRows(),
-    mat1Update.getNumCols(), mat1Update.getNumRows(), std::to_string(seed) +"UPDATE_MAT_1.csv", false);
+  //   printMatrix<double, MajorOrder::ROW_MAJOR>(mat1Update.getDataC(), mat1Update.getNumRows(),
+    // mat1Update.getNumCols(), mat1Update.getNumRows(), std::to_string(seed) +"UPDATE_MAT_1.csv", false);
 
-    printMatrix<double, MajorOrder::ROW_MAJOR>(mat1.getDataC(), mat1.getNumRows(),
-    mat1.getNumCols(), mat1.getNumRows(), std::to_string(seed) +"A_1.csv", false);
+  //   printMatrix<double, MajorOrder::ROW_MAJOR>(mat1.getDataC(), mat1.getNumRows(),
+    // mat1.getNumCols(), mat1.getNumRows(), std::to_string(seed) +"A_1.csv", false);
 
     MatrixDCol matCardProd{1, 1};
     generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1Update, mat2, matCardProd);
-    printMatrix<double, MajorOrder::COL_MAJOR>(matCardProd.getDataC(), matCardProd.getNumRows(),
-    matCardProd.getNumCols(), matCardProd.getNumRows(), std::to_string(seed) +std::to_string(seed)+ "CartProd.csv", false);
+  //   printMatrix<double, MajorOrder::COL_MAJOR>(matCardProd.getDataC(), matCardProd.getNumRows(),
+    // matCardProd.getNumCols(), matCardProd.getNumRows(), std::to_string(seed) +std::to_string(seed)+ "CartProd.csv", false);
     computeMatrixVector<double, MajorOrder::COL_MAJOR>(matCardProd.getDataC(), vectX.getDataC(), pOutVectBTrain,
         mat1Update.getNumRows() * mat2.getNumRows(),
         mat1Update.getNumCols() + mat2.getNumCols(), false);
@@ -650,22 +650,24 @@ void evaluateTrainUpdate(
         mat1Update.getNumCols() + mat2.getNumCols()};
     MatrixDCol matMKLR{matMKLROut.getNumCols(), matMKLROut.getNumCols()};
     // /*********** TRAINING ***********************/
+
+    auto startMKL = std::chrono::high_resolution_clock::now();
     computeGeneral<double, MajorOrder::COL_MAJOR>(matCardProd.getData(), matMKLROut.getData(),
         matCardProd.getNumRows(), matCardProd.getNumCols(), fileName, compute);
     copyMatrix<double, MajorOrder::COL_MAJOR>(matMKLROut.getData(), matMKLR.getData(),
         matMKLROut.getNumRows(), matMKLROut.getNumCols(),
         matMKLROut.getNumCols(), matMKLROut.getNumCols(), true);
-    printMatrix<double, MajorOrder::COL_MAJOR>(matMKLR.getData(), matMKLR.getNumRows(),
-    matMKLR.getNumCols(), matMKLR.getNumRows(), std::to_string(seed) +"UPDATE_MKL_R.csv", false);
+  //   printMatrix<double, MajorOrder::COL_MAJOR>(matMKLR.getData(), matMKLR.getNumRows(),
+    // matMKLR.getNumCols(), matMKLR.getNumRows(), std::to_string(seed) +"UPDATE_MKL_R.csv", false);
     MatrixDCol matRMKLConc {1, 1};
 
     concatenateMatrices(matMKLRUpdate, matMKLR, matRMKLConc, true);
-    printMatrix<double, MajorOrder::COL_MAJOR>(matMKLRUpdate.getData(), matMKLRUpdate.getNumCols(),
-    matMKLRUpdate.getNumCols(), matMKLRUpdate.getNumCols(), std::to_string(seed) +"MKLRUPDATE.csv", false);
-        printMatrix<double, MajorOrder::COL_MAJOR>(matMKLRUpdate.getData(), matMKLRUpdate.getNumCols(),
-    matMKLRUpdate.getNumCols(), matMKLRUpdate.getNumCols(), std::to_string(seed) +"matMKLR.csv", false);
-            printMatrix<double, MajorOrder::COL_MAJOR>(matRMKLConc.getData(), matRMKLConc.getNumRows(),
-    matRMKLConc.getNumCols(), matRMKLConc.getNumRows(), std::to_string(seed) +"matMKLConcatR.csv", false);
+  //   printMatrix<double, MajorOrder::COL_MAJOR>(matMKLRUpdate.getData(), matMKLRUpdate.getNumCols(),
+    // matMKLRUpdate.getNumCols(), matMKLRUpdate.getNumCols(), std::to_string(seed) +"MKLRUPDATE.csv", false);
+      //   printMatrix<double, MajorOrder::COL_MAJOR>(matMKLRUpdate.getData(), matMKLRUpdate.getNumCols(),
+    // matMKLRUpdate.getNumCols(), matMKLRUpdate.getNumCols(), std::to_string(seed) +"matMKLR.csv", false);
+          //   printMatrix<double, MajorOrder::COL_MAJOR>(matRMKLConc.getData(), matRMKLConc.getNumRows(),
+    // matRMKLConc.getNumCols(), matRMKLConc.getNumRows(), std::to_string(seed) +"matMKLConcatR.csv", false);
 
     matMKLROut = MatrixDCol{matRMKLConc.getNumRows() ,matRMKLConc.getNumCols() };
     matMKLR = MatrixDCol{matMKLRUpdate.getNumCols() ,matMKLRUpdate.getNumCols() };
@@ -674,17 +676,20 @@ void evaluateTrainUpdate(
     copyMatrix<double, MajorOrder::COL_MAJOR>(matMKLROut.getData(), matMKLR.getData(),
         matMKLROut.getNumRows(), matMKLROut.getNumCols(),
         matMKLROut.getNumCols(), matMKLROut.getNumCols(), true);
-
+    auto endMKL = std::chrono::high_resolution_clock::now();
+    double elapsedMKL = std::chrono::duration<double>(endMKL - startMKL).count();
+    std::cout << "MKL-Inc time " << elapsedMKL << " seconds" << std::endl;
     matMKLRUpdate = std::move(matMKLR);
-    printMatrix<double, MajorOrder::COL_MAJOR>(matMKLRUpdate.getData(), matMKLRUpdate.getNumCols(),
-    matMKLRUpdate.getNumCols(), matMKLRUpdate.getNumCols(), std::to_string(seed) +"MKLR.csv", false);
+  //   printMatrix<double, MajorOrder::COL_MAJOR>(matMKLRUpdate.getData(), matMKLRUpdate.getNumCols(),
+    // matMKLRUpdate.getNumCols(), matMKLRUpdate.getNumCols(), std::to_string(seed) +"MKLR.csv", false);
 
     MatrixDRow matFigaroR{mat1Update.getNumCols() + mat2.getNumCols(),
         mat1Update.getNumCols() + mat2.getNumCols()};
+    auto startFig = std::chrono::high_resolution_clock::now();
     computeFigaro<double, MajorOrder::ROW_MAJOR>(mat1Update, mat2,
         matFigaroR.getData(), fileName, compute);
-    printMatrix<double, MajorOrder::ROW_MAJOR>(matFigaroR.getData(), matFigaroR.getNumRows(),
-    matFigaroR.getNumCols(), matFigaroR.getNumRows(), std::to_string(seed) +"UPDATE_FIG_R.csv", false);
+  //   printMatrix<double, MajorOrder::ROW_MAJOR>(matFigaroR.getData(), matFigaroR.getNumRows(),
+    // matFigaroR.getNumCols(), matFigaroR.getNumRows(), std::to_string(seed) +"UPDATE_FIG_R.csv", false);
     MatrixDRow matRFigConc {1, 1};
     concatenateMatrices(matFigRUpdate, matFigaroR, matRFigConc, true);
 
@@ -696,9 +701,12 @@ void evaluateTrainUpdate(
     copyMatrix<double, MajorOrder::ROW_MAJOR>(matFigROut.getData(), matFigR.getData(),
         matFigROut.getNumRows(), matFigROut.getNumCols(),
         matFigROut.getNumCols(), matFigROut.getNumCols(), true);
+    auto endFig = std::chrono::high_resolution_clock::now();
+    double elapsedFig = std::chrono::duration<double>(endFig - startFig).count();
+    std::cout << "Fig-Inc time " << elapsedFig << " seconds" << std::endl;
     matFigRUpdate = std::move(matFigR);
 
-    printMatrix<double, MajorOrder::ROW_MAJOR>(matFigROut.getData(), matFigRUpdate.getNumCols(), matFigRUpdate.getNumCols(), matFigRUpdate.getNumCols(), std::to_string(seed) + "LINR.csv", false);
+  //   printMatrix<double, MajorOrder::ROW_MAJOR>(matFigROut.getData(), matFigRUpdate.getNumCols(), matFigRUpdate.getNumCols(), matFigRUpdate.getNumCols(), std::to_string(seed) + "LINR.csv", false);
 }
 
 void evaluateRowUpdates(int numRows1, int numCols1, int numRows2, int numCols2, std::string& fileName, int compute)
@@ -726,7 +734,7 @@ void evaluateRowUpdates(int numRows1, int numCols1, int numRows2, int numCols2, 
 
     for (int numUpdates = 0; numUpdates < numUpdatesTotal; numUpdates++)
     {
-        int numRowsUpdate = 11;
+        int numRowsUpdate = 100;
         auto mat1Update = generateRandom<double>(numRowsUpdate, mat1.getNumCols(), 121 + numUpdates);
         MatrixDRow mat1Out{1, 1};
         concatenateMatrices<double, MajorOrder::ROW_MAJOR>(mat1, mat1Update, mat1Out, true);
@@ -750,11 +758,11 @@ void evaluateRowUpdates(int numRows1, int numCols1, int numRows2, int numCols2, 
         // update the size of mat 1
         mat1 = std::move(mat1Out);
 
-        printMatrix<double, MajorOrder::ROW_MAJOR>(mat1Update.getData(), mat1Update.getNumRows(),
-        mat1Update.getNumCols(), mat1Update.getNumRows(), std::to_string(numUpdates) +"UPDATE_MAT_1.csv", false);
+      //   printMatrix<double, MajorOrder::ROW_MAJOR>(mat1Update.getData(), mat1Update.getNumRows(),
+        // mat1Update.getNumCols(), mat1Update.getNumRows(), std::to_string(numUpdates) +"UPDATE_MAT_1.csv", false);
 
-        printMatrix<double, MajorOrder::ROW_MAJOR>(mat1.getData(), mat1.getNumRows(),
-        mat1.getNumCols(), mat1.getNumRows(), std::to_string(numUpdates) +"A_1.csv", false);
+      //   printMatrix<double, MajorOrder::ROW_MAJOR>(mat1.getData(), mat1.getNumRows(),
+        // mat1.getNumCols(), mat1.getNumRows(), std::to_string(numUpdates) +"A_1.csv", false);
 
         // printMatrix<double, MajorOrder::COL_MAJOR>(matMKLR.getData(), numCols1 + numCols2, numCols1 + numCols2, numCols1 + numCols2, "MKLR.csv", true);
         // printMatrix<double, MajorOrder::ROW_MAJOR>(matFigR.getData(), numCols1 + numCols2, numCols1 + numCols2, numCols1 + numCols2, "FIGR.csv", false);
@@ -784,10 +792,10 @@ void computeVectors(const MatrixDCol& matCartProd, const MatrixDCol& matMKLR,
     const MatrixDRow& matFigR, const double* pVectBTrain,
 double*& h_vectXCompMKL, double*& h_vectXCompFig, int seed)
 {
-    printMatrix<double, MajorOrder::COL_MAJOR>(matMKLR.getDataC(), matMKLR.getNumRows(),
-    matMKLR.getNumCols(), matMKLR.getNumRows(), std::to_string(seed) +"UPDATE2_MKL_R.csv", false);
-        printMatrix<double, MajorOrder::ROW_MAJOR>(matFigR.getDataC(), matFigR.getNumRows(),
-    matFigR.getNumCols(), matFigR.getNumRows(), std::to_string(seed) +"UPDATE2_FIG_R.csv", false);
+  //   printMatrix<double, MajorOrder::COL_MAJOR>(matMKLR.getDataC(), matMKLR.getNumRows(),
+    // matMKLR.getNumCols(), matMKLR.getNumRows(), std::to_string(seed) +"UPDATE2_MKL_R.csv", false);
+      //   printMatrix<double, MajorOrder::ROW_MAJOR>(matFigR.getDataC(), matFigR.getNumRows(),
+    // matFigR.getNumCols(), matFigR.getNumRows(), std::to_string(seed) +"UPDATE2_FIG_R.csv", false);
     solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::COL_MAJOR>(matCartProd.getDataC(), matMKLR.getDataC(), pVectBTrain, h_vectXCompMKL, matCartProd.getNumRows(), matCartProd.getNumCols(), std::to_string(seed) + "results/MKL");
     solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::ROW_MAJOR>(matCartProd.getDataC(), matFigR.getDataC(), pVectBTrain, h_vectXCompFig, matCartProd.getNumRows(), matCartProd.getNumCols(), std::to_string(seed) + "results/LinScale");
 }
