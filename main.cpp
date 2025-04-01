@@ -679,7 +679,7 @@ void evaluateTrainUpdate(
     printMatrix<double, MajorOrder::COL_MAJOR>(matMKLRUpdate.getData(), matMKLRUpdate.getNumCols(),
     matMKLRUpdate.getNumCols(), matMKLRUpdate.getNumCols(), std::to_string(seed) +"MKLR.csv", false);
 
-    MatrixDRow matFigaroR{mat1Update.getNumRows() + mat2.getNumRows() - 1,
+    MatrixDRow matFigaroR{mat1Update.getNumCols() + mat2.getNumCols(),
         mat1Update.getNumCols() + mat2.getNumCols()};
     computeFigaro<double, MajorOrder::ROW_MAJOR>(mat1Update, mat2,
         matFigaroR.getData(), fileName, compute);
@@ -730,7 +730,6 @@ void evaluateRowUpdates(int numRows1, int numCols1, int numRows2, int numCols2, 
         auto mat1Update = generateRandom<double>(numRowsUpdate, mat1.getNumCols(), 121 + numUpdates);
         MatrixDRow mat1Out{1, 1};
         concatenateMatrices<double, MajorOrder::ROW_MAJOR>(mat1, mat1Update, mat1Out, true);
-
 
         MatrixDCol matCardProdUpdate{1, 1};
         generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1Update, mat2,
@@ -787,8 +786,8 @@ double*& h_vectXCompMKL, double*& h_vectXCompFig, int seed)
 {
     printMatrix<double, MajorOrder::COL_MAJOR>(matMKLR.getDataC(), matMKLR.getNumRows(),
     matMKLR.getNumCols(), matMKLR.getNumRows(), std::to_string(seed) +"UPDATE2_MKL_R.csv", false);
-        printMatrix<double, MajorOrder::ROW_MAJOR>(matFigR.getDataC(), matMKLR.getNumRows(),
-    matMKLR.getNumCols(), matMKLR.getNumRows(), std::to_string(seed) +"UPDATE2_FIG_R.csv", false);
+        printMatrix<double, MajorOrder::ROW_MAJOR>(matFigR.getDataC(), matFigR.getNumRows(),
+    matFigR.getNumCols(), matFigR.getNumRows(), std::to_string(seed) +"UPDATE2_FIG_R.csv", false);
     solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::COL_MAJOR>(matCartProd.getDataC(), matMKLR.getDataC(), pVectBTrain, h_vectXCompMKL, matCartProd.getNumRows(), matCartProd.getNumCols(), std::to_string(seed) + "results/MKL");
     solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::ROW_MAJOR>(matCartProd.getDataC(), matFigR.getDataC(), pVectBTrain, h_vectXCompFig, matCartProd.getNumRows(), matCartProd.getNumCols(), std::to_string(seed) + "results/LinScale");
 }
