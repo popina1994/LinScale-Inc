@@ -55,7 +55,19 @@ struct Matrix
     {
         return pArr;
     }
+
+    int getNumRows(void) const {
+        return numRows;
+
+    }
+    int getNumCols(void) const
+    {
+        return numCols;
+    }
 };
+
+using MatrixDCol = Matrix<double, MajorOrder::COL_MAJOR>;
+using MatrixDRow = Matrix<double, MajorOrder::ROW_MAJOR>;
 
 template <typename T, MajorOrder order>
 void printMatrix(T* pArr, int numRows, int numCols, int numRowsCut, const std::string& fileName, bool upperTriangular = false)
@@ -114,13 +126,39 @@ void copyMatrix(T* pArr, T*& pArrOut, int numRows, int numCols, int numRowsCopy,
     }
 }
 
+template <typename T, MajorOrder order>
+void concatenateMatrices(Matrix<T, order>& mat1, Matrix<T, order>& mat2,
+    Matrix<T, order>& matOut,
+    bool horizontal = true)
+{
+    matOut = Matrix<T, order> {mat1.getNumRows() + mat2.getNumRows(), mat1.getNumCols()};
+    int numRowsOut = matOut.getNumRows();
+    int numColsOut = matOut.getNumCols();
+    for (int rowIdx = 0; rowIdx < mat1.getNumRows(); rowIdx++)
+    {
+        for (int colIdx = 0; colIdx < numColsOut; colIdx++)
+        {
+            matOut(rowIdx, colIdx) = mat1(rowIdx, colIdx);
+        }
+    }
+
+    for (int rowIdx = 0; rowIdx < mat2.getNumRows(); rowIdx++)
+    {
+        for (int colIdx = 0; colIdx < numColsOut; colIdx++)
+        {
+            matOut(rowIdx + mat1.getNumRows(), colIdx) = mat1(rowIdx, colIdx);
+        }
+    }
+}
+
+
 // column major version
 template <typename T>
-Matrix<T, MajorOrder::COL_MAJOR> generateRandom(int numRows, int numCols, int seed)
+Matrix<T, MajorOrder::ROW_MAJOR> generateRandom(int numRows, int numCols, int seed)
 {
     std::mt19937 gen(seed); // Fixed seed
     std::uniform_real_distribution<T> dist(0.0, 1.0);
-    auto matA = std::move(Matrix<T, MajorOrder::COL_MAJOR>{numRows, numCols});
+    auto matA = std::move(Matrix<T, MajorOrder::ROW_MAJOR>{numRows, numCols});
     // col_major
     for (int colIdx = 0; colIdx < numCols; colIdx++)
     {
@@ -133,24 +171,25 @@ Matrix<T, MajorOrder::COL_MAJOR> generateRandom(int numRows, int numCols, int se
 }
 
 template<typename T, MajorOrder orderInput, MajorOrder orderOutput>
-void generateCartesianProduct(T* pArr1, T* pArr2, int numRows1, int numCols1, int numRows2, int numCols2, T*& pArr)
+void generateCartesianProduct(Matrix<T, orderInput>& mat1,  Matrix<T, orderInput>& mat2,
+    T*& pArr)
 {
-    int numRows = numRows1 * numRows2;
-    int numCols =  numCols1 + numCols2;
+    int numRows = mat1.getNumRows() * mat2.getNumRows();
+    int numCols =  mat1.getNumCols() + mat2.getNumCols();
     pArr = new T[numRows * numCols];
-    for (int rowIdx = 0; rowIdx < numRows1 * numRows2; rowIdx++)
+    for (int rowIdx = 0; rowIdx < numRows; rowIdx++)
     {
-        int rowIdx1 = rowIdx / numRows2;
-        int rowIdx2 = rowIdx % numRows2;
-        for (int colIdx = 0; colIdx < numCols1; colIdx++)
+        int rowIdx1 = rowIdx / mat2.getNumRows();
+        int rowIdx2 = rowIdx % mat2.getNumRows();
+        for (int colIdx = 0; colIdx < mat1.getNumCols(); colIdx++)
         {
             int64_t pos = getPosId<orderOutput>(rowIdx, colIdx, numRows,  numCols);
-            pArr[pos] =  pArr1[getPosId<orderInput>(rowIdx1, colIdx, numRows1,  numCols1)];
+            pArr[pos] =  mat1(rowIdx1, colIdx);
         }
-        for (int colIdx = numCols1; colIdx < numCols; colIdx++)
+        for (int colIdx = mat1.getNumCols(); colIdx < numCols; colIdx++)
         {
             int64_t pos = getPosId<orderOutput>(rowIdx, colIdx, numRows, numCols);
-            pArr[pos] =  pArr2[getPosId<orderInput>(rowIdx2, colIdx - numCols1, numRows2, numCols2)];
+            pArr[pos] =  mat2(rowIdx2, colIdx - mat1.getNumCols());
         }
     }
 }
@@ -506,6 +545,61 @@ double computeMeanSquaredError(T* pA, T* pB, int numRows)
 }
 
 
+void evaluateTrain(MatrixDRow& mat1, MatrixDRow& mat2, MatrixDRow& vectX,
+    double* h_MKLR, double* h_FigR)
+{
+    // double *h_pCartProdTrain, *h_pCartProdTest;
+    // double *h_vectXCompMKL, *h_vectXCompFig, *pOutVectBTrain, *pOutVectBTest;
+    // double *h_MKLROut;
+
+    // generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1, mat2, h_pCartProdTrain);
+    // computeMatrixVector<double, MajorOrder::COL_MAJOR>(h_pCartProdTrain, vectX.getData(), pOutVectBTrain, numRows1 * numRows2, numCols1 + numCols2, false);
+
+    // // printMatrix<double, MajorOrder::COL_MAJOR>(pOutVectBTrain, numRows1 * numRows2, 1, numRows1 * numRows2, "matProd.csv", false);
+    // // printMatrix<double, MajorOrder::COL_MAJOR>(h_pCartProdTrain, numRows1 * numRows2, numCols1 + numCols2, numRows1 * numRows2, "mat.csv", false);
+
+    // /*********** TRAINING ***********************/
+    // computeGeneral<double, MajorOrder::COL_MAJOR>(h_pCartProdTrain, h_MKLROut, numRows1 * numRows2, numCols1 + numCols2, fileName, compute);
+    // copyMatrix<double, MajorOrder::COL_MAJOR>(h_MKLROut, h_MKLR, numRows1 * numRows2, numCols1 + numCols2, numCols1  + numCols2, numCols1  + numCols2, true);
+    // // printMatrix<double, MajorOrder::COL_MAJOR>(h_MKLR, numCols1 + numCols2, numCols1 + numCols2, numCols1 + numCols2, "R.csv", false);
+
+    // solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::COL_MAJOR>(h_pCartProdTrain, h_MKLR, pOutVectBTrain, h_vectXCompMKL, numRows1 * numRows2, numCols1 + numCols2, "results/MKL");
+
+    // computeFigaro<double, MajorOrder::ROW_MAJOR>(mat1.getData(), mat2.getData(), h_FigR, numRows1, numCols1, numRows2, numCols2, fileName, compute);
+
+    // solveLLS<double, MajorOrder::COL_MAJOR, MajorOrder::ROW_MAJOR>(h_pCartProdTrain, h_FigR, pOutVectBTrain, h_vectXCompFig, numRows1 * numRows2, numCols1 + numCols2, "results/LinScale");
+
+    // /*********** TESTING ***********************/
+    // auto mat1Test = generateRandom<double>(numRows1, numCols1, 0);
+    // auto mat2Test = generateRandom<double>(numRows2, numCols2, 10);
+    // generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1, mat2, h_pCartProdTrain);
+    // computeMatrixVector<double, MajorOrder::COL_MAJOR>(h_pCartProdTest, vectX.getData(), pOutVectBTest, numRows1 * numRows2, numCols1 + numCols2, false);
+
+    // double* pOutVectBTestCompMKL, *pOutVectBTestCompFig;
+
+    // computeMatrixVector<double, MajorOrder::COL_MAJOR>(h_pCartProdTest, h_vectXCompMKL, pOutVectBTestCompMKL, numRows1 * numRows2, numCols1 + numCols2, false);
+    // computeMatrixVector<double, MajorOrder::COL_MAJOR>(h_pCartProdTest, h_vectXCompFig, pOutVectBTestCompFig, numRows1 * numRows2, numCols1 + numCols2, false);
+
+    // double mklError = computeMeanSquaredError(pOutVectBTestCompMKL, pOutVectBTest, numRows1 * numRows2);
+    // double figError = computeMeanSquaredError(pOutVectBTestCompFig, pOutVectBTest, numRows1 * numRows2);
+    // std::cout << "MKL MSE " << mklError << std::endl;
+    // std::cout << "Figaro MSE " << figError << std::endl;
+}
+
+void evaluateRowUpdates(int numRows1, int numCols1, int numRows2, int numCols2, std::string& fileName, int compute)
+{
+    /*********** DATA GENERATION ***********************/
+    auto mat1 = generateRandom<double>(numRows1, numCols1, 0);
+    auto mat2 = generateRandom<double>(numRows2, numCols2, 10);
+    auto vectX = generateRandom<double>(1, numCols1 + numCols2, 15);
+    const int numUpdatesTotal = 10;
+    for (int numUpdates = 0; numUpdates < numUpdatesTotal; numUpdates++)
+    {
+        // evaluateTrain(mat1, mat2, vectX, )
+    }
+}
+
+
 void evaluate(int numRows1, int numCols1, int numRows2, int numCols2, std::string& fileName, int compute)
 {
     double *h_pCartProdTrain, *h_pCartProdTest;
@@ -517,11 +611,11 @@ void evaluate(int numRows1, int numCols1, int numRows2, int numCols2, std::strin
     auto mat2 = generateRandom<double>(numRows2, numCols2, 10);
     auto vectX = generateRandom<double>(1, numCols1 + numCols2, 15);
 
-    // printMatrix<double, MajorOrder::ROW_MAJOR>(h_mat1, numRows1, numCols1, numRows1, "A.csv", false);
-    // printMatrix<double, MajorOrder::ROW_MAJOR>(h_mat2, numRows2, numCols2, numRows2, "B.csv", false);
+    // printMatrix<double, MajorOrder::ROW_MAJOR>(mat1.getData(), numRows1, numCols1, numRows1, "A.csv", false);
+    // printMatrix<double, MajorOrder::ROW_MAJOR>(mat2.getData(), numRows2, numCols2, numRows2, "B.csv", false);
     // printMatrix<double, MajorOrder::COL_MAJOR>(vectX.getData(), numCols1 + numCols2, 1, numCols1 + numCols2, "x_vect.csv", false);
 
-    generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1.getData(), mat2.getData(), numRows1, numCols1, numRows2, numCols2, h_pCartProdTrain);
+    generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1, mat2, h_pCartProdTrain);
     computeMatrixVector<double, MajorOrder::COL_MAJOR>(h_pCartProdTrain, vectX.getData(), pOutVectBTrain, numRows1 * numRows2, numCols1 + numCols2, false);
 
     // printMatrix<double, MajorOrder::COL_MAJOR>(pOutVectBTrain, numRows1 * numRows2, 1, numRows1 * numRows2, "matProd.csv", false);
@@ -541,7 +635,8 @@ void evaluate(int numRows1, int numCols1, int numRows2, int numCols2, std::strin
     /*********** TESTING ***********************/
     auto mat1Test = generateRandom<double>(numRows1, numCols1, 0);
     auto mat2Test = generateRandom<double>(numRows2, numCols2, 10);
-    generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(mat1Test.getData(), mat2Test.getData(), numRows1, numCols1, numRows2, numCols2, h_pCartProdTest);
+    generateCartesianProduct<double, MajorOrder::ROW_MAJOR, MajorOrder::COL_MAJOR>(
+            mat1Test, mat2Test,  h_pCartProdTest);
     computeMatrixVector<double, MajorOrder::COL_MAJOR>(h_pCartProdTest, vectX.getData(), pOutVectBTest, numRows1 * numRows2, numCols1 + numCols2, false);
 
     double* pOutVectBTestCompMKL, *pOutVectBTestCompFig;
@@ -553,7 +648,6 @@ void evaluate(int numRows1, int numCols1, int numRows2, int numCols2, std::strin
     double figError = computeMeanSquaredError(pOutVectBTestCompFig, pOutVectBTest, numRows1 * numRows2);
     std::cout << "MKL MSE " << mklError << std::endl;
     std::cout << "Figaro MSE " << figError << std::endl;
-
 }
 
 int main(int argc, char* argv[])
